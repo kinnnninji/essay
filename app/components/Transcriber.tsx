@@ -17,6 +17,22 @@ type TranscribeResponse = {
   error?: string;
 };
 
+/** Vercel Blob의 presigned 업로드는 한글 등 비-ASCII 파일명에서 인코딩이 깨지는 버그가 있어
+ *  (서명된 토큰의 경로와 실제 업로드 경로가 불일치하다고 거부됨), Blob에는 원본 파일명 대신
+ *  무작위 ASCII 이름만 사용합니다. TXT 다운로드 파일명은 브라우저에 남아있는 원본 File 객체의
+ *  이름을 그대로 쓰므로 한글 파일명이 사라지지 않습니다. */
+function toSafeBlobPathname(file: File): string {
+  const extMatch = file.name.match(/\.[a-zA-Z0-9]+$/);
+  const ext =
+    extMatch?.[0].toLowerCase() ??
+    (file.type === "application/pdf" ? ".pdf" : ".png");
+  const random =
+    typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2);
+  return `upload-${random}${ext}`;
+}
+
 function detectKind(file: File): FileKind | null {
   const name = file.name.toLowerCase();
   if (file.type === "application/pdf" || name.endsWith(".pdf")) return "pdf";
@@ -129,7 +145,7 @@ export default function Transcriber() {
     setNotice(null);
 
     try {
-      const blob = await uploadPresigned(file.name, file, {
+      const blob = await uploadPresigned(toSafeBlobPathname(file), file, {
         access: "private",
         handleUploadUrl: "/api/upload",
         clientPayload: preview?.kind === "pdf" ? "pdf" : "image",
