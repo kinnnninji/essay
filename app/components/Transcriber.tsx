@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { upload } from "@vercel/blob/client";
+import { uploadPresigned } from "@vercel/blob/client";
 import {
   ACCEPT_ATTR,
   MAX_IMAGE_BYTES,
@@ -129,7 +129,7 @@ export default function Transcriber() {
     setNotice(null);
 
     try {
-      const blob = await upload(file.name, file, {
+      const blob = await uploadPresigned(file.name, file, {
         access: "public",
         handleUploadUrl: "/api/upload",
         clientPayload: preview?.kind === "pdf" ? "pdf" : "image",
