@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { del } from "@vercel/blob";
+import { del, get } from "@vercel/blob";
 import {
   MAX_IMAGE_BYTES,
   MAX_PDF_BYTES,
@@ -81,14 +81,15 @@ function detectFileType(buffer: Buffer): DetectedFile | null {
 }
 
 /** 업로드는 클라이언트가 Vercel Blob에 직접 하므로, 이 서버가 받는 건 그 URL뿐입니다.
- *  임의의 외부 URL을 서버가 대신 요청하지 않도록(SSRF 방지) 우리 Blob 스토어 도메인인지 확인합니다. */
+ *  임의의 외부 URL을 서버가 대신 요청하지 않도록(SSRF 방지) 우리 Blob 스토어 도메인인지 확인합니다.
+ *  업로드된 파일은 비공개(private)로 저장되므로 private 서브도메인만 허용합니다. */
 function isOwnBlobUrl(value: unknown): value is string {
   if (typeof value !== "string") return false;
   try {
     const url = new URL(value);
     return (
       url.protocol === "https:" &&
-      url.hostname.endsWith(".public.blob.vercel-storage.com")
+      url.hostname.endsWith(".private.blob.vercel-storage.com")
     );
   } catch {
     return false;
@@ -224,14 +225,16 @@ export async function POST(request: Request) {
   // 그 내용만 가져옵니다. 전사 후에는 아래 finally에서 Blob을 삭제해 남겨두지 않습니다.
   let buffer: Buffer;
   try {
-    const blobResponse = await fetch(blobUrl);
-    if (!blobResponse.ok) {
+    // 파일이 비공개(private)로 저장되므로, 인증 없는 fetch가 아니라 서버의
+    // OIDC 자격 증명으로 인증하는 get()을 사용해야 내려받을 수 있습니다.
+    const result = await get(blobUrl, { access: "private" });
+    if (!result || result.statusCode !== 200) {
       return errorResponse(
         "업로드한 파일을 불러오지 못했습니다. 파일을 다시 선택해 주세요.",
         400,
       );
     }
-    buffer = Buffer.from(await blobResponse.arrayBuffer());
+    buffer = Buffer.from(await new Response(result.stream).arrayBuffer());
   } catch {
     return errorResponse(
       "업로드한 파일을 불러오지 못했습니다. 네트워크 상태를 확인하고 다시 시도해 주세요.",

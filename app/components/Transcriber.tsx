@@ -130,7 +130,7 @@ export default function Transcriber() {
 
     try {
       const blob = await uploadPresigned(file.name, file, {
-        access: "public",
+        access: "private",
         handleUploadUrl: "/api/upload",
         clientPayload: preview?.kind === "pdf" ? "pdf" : "image",
         contentType: file.type || undefined,
